@@ -129,11 +129,6 @@ def get_freecad_lib_root(freecad_executable=None):
             if lines[0] != _magic_first_line:
                 # TODO maybe print some other data from `e`?
                 raise
-        '''
-        print('freecad_cmd:')
-        print(freecad_cmd)
-        import ipdb; ipdb.set_trace()
-        '''
 
     # Getting rid of `_magic_first_line`, which we no longer need.
     lines = lines[1:]
@@ -161,20 +156,11 @@ def get_freecad_lib_root(freecad_executable=None):
             ' work.'
         )
 
-    # Could refactor to use (some of) these FreeCAD sys.path lines directly
-    # in our sys.path, in case the stuff that needs to be on sys.path isn't
-    # always in the same structure under one particular root directory.
-    # Perhaps when not installed from source (or not exactly as I have it),
-    # this is possible.
-    '''
-    print('freecad sys.path:')
-    from pprint import pprint
-    pprint(freecad_sys_path)
-    '''
-
     main_freecad_lib = 'FreeCAD.so'
     freecad_lib_subdirs = []
     for d in freecad_sys_path:
+        # TODO maybe actually check / filter to those ending in /lib
+        # (probably not noticeably faster though...)
         if os.path.exists(os.path.join(d, main_freecad_lib)):
             freecad_lib_subdirs.append(d)
 
@@ -204,8 +190,7 @@ def get_freecad_lib_root(freecad_executable=None):
     return freecad_lib_root
 
 
-def add_freecad_dirs_to_syspath(freecad_executable=None, append_all=False
-    ) -> None:
+def add_freecad_dirs_to_syspath(freecad_executable=None) -> None:
     """Adds directories to `sys.path` so FreeCAD modules can be imported.
 
     Args:
@@ -213,46 +198,25 @@ def add_freecad_dirs_to_syspath(freecad_executable=None, append_all=False
         will first use the value in FREECAD_EXECUTABLE, if that environment
         variable is set, but will otherwise try `FreeCAD` as if it were on the
         PATH.
-
-    append_all (bool): whether to put all FreeCAD paths at the end of
-        `sys.path`, rather than inserting some at the beginning as FreeCAD does.
-        Defaults to `False`.
-
-    Not currently adding the:
-    <$HOME>/.FreeCAD/Macro/
-    <$HOME>/src/FreeCAD/build/Macro
-    directories that FreeCAD inserts at the end of `sys.path`.
     """
     freecad_lib_root = get_freecad_lib_root(
         freecad_executable=freecad_executable
     )
-    '''
-    from pprint import pprint
-    print('sys.path BEFORE:')
-    pprint(sys.path)
-    '''
+    # Added the .../lib dir to sys.path is necessary so that FreeCAD can be
+    # imported, yet this import process seems to add all the other directories
+    # to sys.path AS WELL AS adding the lib directory again.
+    # Just appending the lib dir seems to add the lowest amount of duplicate
+    # dirs (just the lib dir is duplicated).
+    lib_dir = os.path.join(freecad_lib_root, 'lib')
+    sys.path.append(lib_dir)
 
-    # From some manual testing I did, it seems every subdirectory of
-    # <freecad_lib_root>/Mod is added to `sys.path`
-    for d in required_subdirs[::-1]:
-        abs_d = os.path.join(freecad_lib_root, d)
-        # See Ulf Rompe's answer https://stackoverflow.com/questions/10095037
-        # for one reason to not insert at 0, though I think FreeCAD already
-        # screws this up so it shouldn't matter.
-        sys.path.insert(0, abs_d)
-
-    mod_subdirs = glob.glob(os.path.join(freecad_lib_root, 'Mod', '*/'))
-    for d in mod_subdirs:
-        # Checking `isdir` in case a file gets added to this directory at some
-        # point (accidentally or intentionally via the FreeCAD project).
-        if os.path.isdir(d):
-            sys.path.insert(0, d)
-
-    '''
-    print('sys.path AFTER:')
-    pprint(sys.path)
-    '''
-
+    # So that we can remove the duplicate lib entry from sys.path before
+    # returning control to whatever code might be calling this function
+    import FreeCAD
+    last_lib_dir_idx = len(sys.path) - sys.path[::-1].index(lib_dir) - 1
+    assert sys.path[last_lib_dir_idx] == lib_dir
+    del sys.path[last_lib_dir_idx]
+    
     # TODO do FreeCAD [+ maybe FreeCADCmd] need to be on PYTHONPATH?
     # when freecad_executable=/home/tom/src/FreeCAD/build/bin/FreeCAD,
     # /home/tom/src/FreeCAD/build/bin is one of the sys.path entries, but when
