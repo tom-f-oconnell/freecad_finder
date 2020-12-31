@@ -73,21 +73,29 @@ def get_freecad_lib_root(freecad_executable=None):
             )
         return freecad_lib_root
 
-    expand = True
+    using_exe_envvar = False
     if freecad_executable is None:
         # By default, assume FreeCAD is on $PATH, and try to invoke without
         # specifying full path.
         freecad_executable = 'FreeCAD'
-        expand = False
 
         freecad_exe_envvar = 'FREECAD_EXECUTABLE'
         if freecad_exe_envvar in os.environ:
             # Just assuming this exists. Will let subsequent calls fail if not.
             freecad_executable = os.environ[freecad_exe_envvar]
-            expand = True
+            using_exe_envvar = True
 
-    if expand:
-        freecad_executable = os.path.expanduser(freecad_executable)
+    # So people can use tilde in the env var / kwarg.
+    freecad_executable = os.path.expanduser(freecad_executable)
+    # not currently checking it's actually executable, but could maybe w/
+    # something like https://stackoverflow.com/questions/377017
+    if using_exe_envvar and not os.path.isfile(freecad_executable):
+        warnings.warn(f'{freecad_exe_envvar}={freecad_executable} is not a '
+            'file that exists. falling back to assuming "FreeCAD" executable is'
+            'on PATH.'
+        )
+        freecad_executable = 'FreeCAD'
+    del using_exe_envvar
 
     # Note that it seems this approach might not work in Windows, because we may
     # not be able to open this temporary file in another process...
